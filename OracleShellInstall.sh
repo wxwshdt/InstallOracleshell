@@ -1,8 +1,7 @@
 #!/bin/bash
 echo "####################################################################################"
 echo "##Author 	: LuciferLiu"
-echo "##Blog   	: https://luciferliu.blog.csdn.net/"
-echo "##微信公众号	: Lucifer三思而后行"
+echo "##Blog   	: https://blog.csdn.net/m0_50546016"
 echo "##Github        : https://github.com/pc-study/InstallOracleshell"
 echo "##Version	: 1.0"
 echo "##Function   	: Oracle 11g/12c/18c/19c(Single and Rac) install on Linux 6/7/8"
@@ -17,9 +16,10 @@ echo "##########################################################################
 # Parameters For Install
 ####################################################################################
 #Oracle Install Mode(RAC/Single/RESTART)
+OracleInstallMode=
 SOFTWAREDIR=$(pwd)
 DAYTIME=$(date +%Y%m%d)
-RELS=$(cat /etc/system-release)
+RELS=$(more /etc/system-release)
 OS_VER_PRI=$(echo "${RELS#*release}" | awk '{print $1}' | cut -f 1 -d '.')
 memTotal=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 swapTotal=$(grep -i 'swaptotal' /proc/meminfo | awk '{print $2}')
@@ -28,7 +28,7 @@ HOSTNAME=orcl
 PUBLICIP=
 ORACLE_SID=orcl
 ISCDB=FALSE
-PDBNAME=
+PDBNAME=pdb01
 ROOTPASSWD=oracle
 ORAPASSWD=oracle
 GRIDPASSWD=oracle
@@ -38,7 +38,6 @@ ARCHIVEDIR=/archivelog
 BACKUPDIR=/backup
 SCRIPTSDIR=/home/oracle/scripts
 CHARACTERSET=AL32UTF8
-NCHARACTERSET=AL16UTF16
 GRID_SID=+ASM
 RACPUBLICFCNAME=
 RACPRIVFCNAME=
@@ -78,13 +77,11 @@ DNS=N
 DNSSERVER=N
 DNSNAME=
 DNSIP=
-ISO=Y
-VirtualBox=N
 ###################################################################################
 ##The following is a custom function：
 ####################################################################################
 #Type stty erase '^H' before read
-#stty erase '^H'
+stty erase '^H'
 #Add colors to fonts through variables
 #Define a c1() function here, if you want to change the font color later, you can call it directly
 c1() {
@@ -262,7 +259,6 @@ help() {
   c1 "-op,		--ORAPASSWD			ORACLE USER PASSWORD(oracle)" green
   c1 "-b,		--ENV_BASE_DIR			ORACLE BASE DIR(/u01/app)" green
   c1 "-s,		--CHARACTERSET			ORACLE CHARACTERSET(ZHS16GBK|AL32UTF8)" green
-  c1 "-ns,		--NCHARACTERSET			ORACLE NATIONAL CHARACTERSET(AL16UTF16|UTF8)" green
   c1 "-rs,		--ROOTPASSWD			ROOT USER PASSWORD" green
   c1 "-gp,		--GRIDPASSWD			GRID USER PASSWORD(oracle)" green
   c1 "-pb1,		--RAC1PUBLICIP			RAC NODE ONE PUBLIC IP" green
@@ -283,7 +279,7 @@ help() {
   c1 "-od,		--OCRP_BASEDISK			RAC OCRDISK DISKNAME" green
   c1 "-or,		--OCRREDUN			RAC OCR REDUNDANCY(EXTERNAL|NORMAL|HIGH)" green
   c1 "-dr,		--DATAREDUN			RAC DATA REDUNDANCY(EXTERNAL|NORMAL|HIGH)" green
-  c1 "-tsi,           --TIMESERVERIP                  RAC TIME SERVER IP" green
+  c1 "-tsi,            --TIMESERVERIP                    RAC TIME SERVER IP" green
   c1 "-txh            --TuXingHua                     Tu Xing Hua Install" green
   c1 "-udev           --UDEV                          Whether Auto Set UDEV" green
   c1 "-dns            --DNS                           RAC CONFIGURE DNS(Y|N)" green
@@ -296,10 +292,6 @@ help() {
   c1 "-ocd,		--ONLYCREATEDB		        ONLY CREATE DATABASE(Y|N)" green
   c1 "-gpa,		--GRID RELEASE UPDATE		GRID RELEASE UPDATE(32072711)" green
   c1 "-opa,		--ORACLE RELEASE UPDATE		ORACLE RELEASE UPDATE(32072711)" green
-  c1 "-iso,		--ISO                           WHETHER MOUNT ISO OR YUN" green
-  c1 "-installmode,		--OracleInstallMode     Oralce Install mode(single/rac)" green
-  c1 "-dbv,		--DBV                           Database Version(11/12/18/19)" green
-  c1 "-vbox,		--VirtualBox                  Vagrant VirtualBox ASM" green
   exit 0
 }
 
@@ -336,10 +328,6 @@ while [ -n "$1" ]; do #Here by judging whether $1 exists
     ;;
   -s | --CHARACTERSET)
     CHARACTERSET=$2
-    shift 2
-    ;;
-  -ns | --NCHARACTERSET)
-    NCHARACTERSET=$2
     shift 2
     ;;
   -m | --ONLYCONFIGOS)
@@ -494,14 +482,6 @@ while [ -n "$1" ]; do #Here by judging whether $1 exists
     DNSIP=$2
     shift 2
     ;;
-  -iso | --ISO)
-    ISO=$2
-    shift 2
-    ;;
-  -vbox | --VirtualBox)
-    VirtualBox=$2
-    shift 2
-    ;;
   -h | --help) help ;; # function help is called
   --)
     shift
@@ -556,25 +536,17 @@ if [ "${nodeNum}" -eq 1 ]; then
   echo
   c1 "Please Choose Oracle Install Mode(single/restart/rac) :" blue
   echo
-  if [ -z "${OracleInstallMode}" ]; then
-    read -r OracleInstallMode
-  else
-    echo "${OracleInstallMode}"
-  fi
+  read -r OracleInstallMode
   echo
   c1 "Please Choose Oracle Database Version(11g/12c/18c/19c) :" blue
   echo
-  if [ -z "${DB_VERSION}" ]; then
-    read -r DB_VERSION
-  else
-    echo "${DB_VERSION}"
-  fi
+  read -r DB_VERSION
   echo
 fi
 
 if [ "${OracleInstallMode}" = "RAC" ] || [ "${OracleInstallMode}" = "rac" ]; then
-  RAC1HOSTNAME=${HOSTNAME}1
-  RAC2HOSTNAME=${HOSTNAME}2
+  RAC1HOSTNAME=${HOSTNAME}01
+  RAC2HOSTNAME=${HOSTNAME}02
 fi
 
 ##Judge whether ip or dbversion is empty, if it is empty, exit
@@ -595,13 +567,11 @@ if [ "${nodeNum}" -eq 1 ]; then
         exit 99
       fi
     fi
-    if [ "${OS_VER_PRI}" -eq 7 ]; then
-      if [[ "${DB_VERSION}" == "11" ]] || [[ "${DB_VERSION}" == "11g" ]] || [[ "${DB_VERSION}" == "11G" ]]; then
-        if [ ! -f "${SOFTWAREDIR}"/p18370031_112040_Linux-x86-64.zip ]; then
-          c1 "Make sure the Patch 18370031 is in the ${SOFTWAREDIR} directory:" red
-          c1 "p18370031_112040_Linux-x86-64.zip" blue
-          exit 99
-        fi
+    if [ "${DB_VERSION}" = "11.2.0.4" ] && [ "${OS_VERSION}" = "linux7" ]; then
+      if [ ! -f "${SOFTWAREDIR}"/p18370031_112040_Linux-x86-64.zip ]; then
+        c1 "Make sure the Patch 18370031 is in the ${SOFTWAREDIR} directory:" red
+        c1 "p18370031_112040_Linux-x86-64.zip" blue
+        exit 99
       fi
     fi
     # 12c rac grid install on linux7 with bug
@@ -627,7 +597,6 @@ if [ "${nodeNum}" -eq 1 ]; then
         echo -e " -op ${ORAPASSWD}\c"
         echo -e " -gp ${GRIDPASSWD}\c"
         echo -e " -s ${CHARACTERSET}\c"
-        echo -e " -ns ${NCHARACTERSET}\c"
         echo -e " -pb1 ${RAC1PUBLICIP} -pb2 ${RAC2PUBLICIP}\c"
         echo -e " -vi1 ${RAC1VIP} -vi2 ${RAC2VIP}\c"
         echo -e " -pi1 ${RAC1PRIVIP} -pi2 ${RAC2PRIVIP}\c"
@@ -643,8 +612,6 @@ if [ "${nodeNum}" -eq 1 ]; then
         echo -e " -txh ${TuXingHua}\c"
         echo -e " -udev ${UDEV}\c"
         echo -e " -dns ${DNS}\c"
-        echo -e " -iso ${ISO}\c"
-        echo -e " -vbox ${VirtualBox}\c"
       } >"${SOFTWAREDIR}"/racnode2.sh
       ##TimeServer
       if [ -n "${TIMESERVERIP}" ]; then
@@ -842,24 +809,20 @@ InstallRPM() {
   ####################################################################################
   # Judge ISO file mount status
   ####################################################################################
-  if [ "${ISO}" = "Y" ]; then
-    mountPatch=$(mount | grep -E "iso|ISO" | awk '{print $3}')
-    if [ ! "${mountPatch}" ]; then
-      echo
-      c1 "The ISO file is not mounted on system." red
-      exit 99
-    else
-      ## move all repo bak
-      mkdir /etc/yum.repos.d/bak -p
-      mv /etc/yum.repos.d/* /etc/yum.repos.d/bak
-      ##if [ ! -f /etc/yum.repos.d/local.repo ]; then
+  mountPatch=$(mount | grep -E "iso|ISO" | awk '{print $3}')
+  if [ ! "${mountPatch}" ]; then
+    echo
+    c1 "The ISO file is not mounted on system." red
+    exit 99
+  else
+    if [ ! -f /etc/yum.repos.d/local.repo ]; then
       if [ "${OS_VERSION}" = "linux6" ] || [ "${OS_VERSION}" = "linux7" ]; then
         {
           echo "[server]"
           echo "name=server"
           echo "baseurl=file://""${mountPatch}"
           echo "enabled=1"
-          echo "gpgcheck=0"
+          echo "gpgcheck=1"
         } >/etc/yum.repos.d/local.repo
       elif [ "${OS_VERSION}" = "linux8" ]; then
         {
@@ -867,119 +830,114 @@ InstallRPM() {
           echo "name=BaseOS"
           echo "baseurl=file:///${mountPatch}/BaseOS"
           echo "enabled=1"
-          echo "gpgcheck=0"
+          echo "gpgcheck=1"
           echo "[AppStream]"
           echo "name=AppStream"
           echo "baseurl=file:///${mountPatch}/AppStream"
           echo "enabled=1"
-          echo "gpgcheck=0"
+          echo "gpgcheck=1"
         } >/etc/yum.repos.d/local.repo
-        ##fi
-        ##rpm --import "${mountPatch}"/RPM-GPG-KEY-redhat-release
+      fi
+      rpm --import "${mountPatch}"/RPM-GPG-KEY-redhat-release
+    fi
+    if [ "${OS_VERSION}" = "linux6" ]; then
+      if [ "${TuXingHua}" = "y" ] || [ "${TuXingHua}" = "Y" ]; then
+        #LINUX 6
+        yum groupinstall -y "X Window System"
+        yum groupinstall -y "Desktop"
+        yum install -y nautilus-open-terminal
+        yum install -y tigervnc*
+      fi
+      if [ "$(rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXrender make net-tools smartmontools sysstat e2fsprogs e2fsprogs-libs expect unzip openssh-clients readline psmisc ksh nfs-utils --qf '%{name}.%{arch}\n' | grep -E -c "not installed")" -gt 0 ]; then
+        yum install -y bc \
+          binutils \
+          compat-libcap1 \
+          compat-libstdc++-33 \
+          gcc \
+          gcc-c++ \
+          elfutils-libelf \
+          elfutils-libelf-devel \
+          glibc \
+          glibc-devel \
+          libaio libaio-devel \
+          libgcc \
+          libstdc++ \
+          libstdc++-devel \
+          libxcb \
+          libX11 \
+          libXau \
+          libXi \
+          libXrender \
+          make \
+          net-tools \
+          smartmontools \
+          sysstat \
+          e2fsprogs \
+          e2fsprogs-libs \
+          expect \
+          unzip \
+          openssh-clients \
+          readline* \
+          psmisc \
+          ksh \
+          nfs-utils --skip-broken
+      fi
+    elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
+      if [ "${TuXingHua}" = "y" ] || [ "${TuXingHua}" = "Y" ]; then
+        #LINUX 7 && LINUX 8
+        yum groupinstall -y "Server with GUI"
+        yum install -y tigervnc*
+      fi
+      if [ "$(rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline psmisc --qf '%{name}.%{arch}\n' | grep -E -c "not installed")" -gt 0 ]; then
+        yum install -y bc \
+          binutils \
+          compat-libcap1 \
+          compat-libstdc++-33 \
+          gcc \
+          gcc-c++ \
+          elfutils-libelf \
+          elfutils-libelf-devel \
+          glibc \
+          glibc-devel \
+          ksh \
+          libaio \
+          libaio-devel \
+          libgcc \
+          libstdc++ \
+          libstdc++-devel \
+          libxcb \
+          libX11 \
+          libXau \
+          libXi \
+          libXtst \
+          libXrender \
+          libXrender-devel \
+          make \
+          net-tools \
+          nfs-utils \
+          smartmontools \
+          sysstat \
+          e2fsprogs \
+          e2fsprogs-libs \
+          fontconfig-devel \
+          expect \
+          unzip \
+          openssh-clients \
+          readline* \
+          psmisc --skip-broken
+      fi
+      ##Solutions: error while loading shared libraries: libnsl.so.1: cannot open shared object
+      ##Requirements for Installing Oracle Database/Client 19c on OL8 or RHEL8 64-bit (x86-64) (Doc ID 2668780.1)
+      if [ "${OS_VERSION}" = "linux8" ]; then
+        dnf install -y librdmacm
+        dnf install -y libnsl*
+        dnf install -y libibverbs
+        ##Linux Troubleshooting – semanage command not found in CentOS 7/8 And RHEL 7/8
+        dnf install -y policycoreutils-python-utils
       fi
     fi
-  fi
-  ## For Chinese Linux ENV
-  export LC_ALL=en_US.UTF-8
-  if [ "${OS_VERSION}" = "linux6" ]; then
-    if [ "${TuXingHua}" = "y" ] || [ "${TuXingHua}" = "Y" ]; then
-      #LINUX 6
-      yum groupinstall -y "X Window System"
-      yum groupinstall -y "Desktop"
-      yum install -y nautilus-open-terminal
-      yum install -y tigervnc*
-    fi
-    if [ "$(rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXrender make net-tools smartmontools sysstat e2fsprogs e2fsprogs-libs expect unzip openssh-clients readline readline-devel psmisc ksh nfs-utils --qf '%{name}.%{arch}\n' | grep -E -c "not installed")" -gt 0 ] || [ "$(rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXrender make net-tools smartmontools sysstat e2fsprogs e2fsprogs-libs expect unzip openssh-clients readline readline-devel psmisc ksh nfs-utils --qf '%{name}.%{arch}\n' | grep -E -c "未安装软件包")" -gt 0 ]; then
-      yum install -y bc \
-        binutils \
-        compat-libcap1 \
-        compat-libstdc++-33 \
-        gcc \
-        gcc-c++ \
-        elfutils-libelf \
-        elfutils-libelf-devel \
-        glibc \
-        glibc-devel \
-        libaio libaio-devel \
-        libgcc \
-        libstdc++ \
-        libstdc++-devel \
-        libxcb \
-        libX11 \
-        libXau \
-        libXi \
-        libXrender \
-        make \
-        net-tools \
-        smartmontools \
-        sysstat \
-        e2fsprogs \
-        e2fsprogs-libs \
-        expect \
-        unzip \
-        openssh-clients \
-        readline \
-        readline-devel \
-        psmisc \
-        ksh \
-        nfs-utils --skip-broken
-    fi
-  elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-    if [ "${TuXingHua}" = "y" ] || [ "${TuXingHua}" = "Y" ]; then
-      #LINUX 7 && LINUX 8
-      yum groupinstall -y "Server with GUI"
-      yum install -y tigervnc*
-    fi
-    if [ "$(rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline readline-devel psmisc --qf '%{name}.%{arch}\n' | grep -E -c "not installed")" -gt 0 ] || [ "$(rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline readline-devel psmisc --qf '%{name}.%{arch}\n' | grep -E -c "未安装软件包")" -gt 0 ]; then
-      yum install -y bc \
-        binutils \
-        compat-libcap1 \
-        compat-libstdc++-33 \
-        gcc \
-        gcc-c++ \
-        elfutils-libelf \
-        elfutils-libelf-devel \
-        glibc \
-        glibc-devel \
-        ksh \
-        libaio \
-        libaio-devel \
-        libgcc \
-        libstdc++ \
-        libstdc++-devel \
-        libxcb \
-        libX11 \
-        libXau \
-        libXi \
-        libXtst \
-        libXrender \
-        libXrender-devel \
-        make \
-        net-tools \
-        nfs-utils \
-        smartmontools \
-        sysstat \
-        e2fsprogs \
-        e2fsprogs-libs \
-        fontconfig-devel \
-        expect \
-        unzip \
-        openssh-clients \
-        readline \
-        readline-devel \
-        psmisc --skip-broken
-    fi
-    ##Solutions: error while loading shared libraries: libnsl.so.1: cannot open shared object
-    ##Requirements for Installing Oracle Database/Client 19c on OL8 or RHEL8 64-bit (x86-64) (Doc ID 2668780.1)
-    if [ "${OS_VERSION}" = "linux8" ]; then
-      dnf install -y librdmacm
-      dnf install -y libnsl*
-      dnf install -y libibverbs
-      ##Linux Troubleshooting – semanage command not found in CentOS 7/8 And RHEL 7/8
-      dnf install -y policycoreutils-python-utils
-    fi
-  fi
 
+  fi
   ## yum install -y openssh
   if [ "$nodeNum" -eq 1 ]; then
     if [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; then
@@ -1051,11 +1009,11 @@ EOF
   # fi
 
   if [ "${OS_VERSION}" = "linux6" ]; then
-    logwrite "RPM Check" "rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXrender make net-tools smartmontools sysstat e2fsprogs e2fsprogs-libs expect unzip openssh-clients readline readline-devel"
+    logwrite "RPM Check" "rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXrender make net-tools smartmontools sysstat e2fsprogs e2fsprogs-libs expect unzip openssh-clients readline"
   elif [ "${OS_VERSION}" = "linux7" ]; then
-    logwrite "RPM Check" "rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline readline-devel"
+    logwrite "RPM Check" "rpm -q bc binutils compat-libcap1 compat-libstdc++-33 gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline"
   elif [ "${OS_VERSION}" = "linux8" ]; then
-    logwrite "RPM Check" "rpm -q bc binutils gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline readline-devel librdmacm libnsl libibverbs policycoreutils-python-utils"
+    logwrite "RPM Check" "rpm -q bc binutils gcc gcc-c++ elfutils-libelf elfutils-libelf-devel glibc glibc-devel ksh libaio libaio-devel libgcc libstdc++ libstdc++-devel libxcb libX11 libXau libXi libXtst libXrender libXrender-devel make net-tools nfs-utils smartmontools sysstat e2fsprogs e2fsprogs-libs fontconfig-devel expect unzip openssh-clients readline librdmacm libnsl libibverbs policycoreutils-python-utils"
   fi
 }
 
@@ -1094,12 +1052,12 @@ $RAC1PUBLICIP ${RAC1HOSTNAME}.${DNSNAME} $RAC1HOSTNAME
 $RAC2PUBLICIP ${RAC2HOSTNAME}.${DNSNAME} $RAC2HOSTNAME
 
 ##Private IP
-$RAC1PRIVIP $RAC1HOSTNAME-priv
-$RAC2PRIVIP $RAC2HOSTNAME-priv
+$RAC1PRIVIP ${RAC1HOSTNAME}-priv.${DNSNAME} ${RAC1HOSTNAME}-priv
+$RAC2PRIVIP ${RAC2HOSTNAME}-priv.${DNSNAME} ${RAC2HOSTNAME}-priv
 
 ##Virtual IP
-$RAC1VIP $RAC1HOSTNAME-vip
-$RAC2VIP $RAC2HOSTNAME-vip
+$RAC1VIP ${RAC1HOSTNAME}-vip.${DNSNAME} ${RAC1HOSTNAME}-vip
+$RAC2VIP ${RAC2HOSTNAME}-vip.${DNSNAME} ${RAC2HOSTNAME}-vip
 
 EOF
         if [ "${scan_sum}" = "1" ]; then
@@ -1125,8 +1083,8 @@ EOF
           cat <<EOF >>/etc/hosts
 
 ##Private IP 2
-$RAC1PRIVIP1 $RAC1HOSTNAME-priv1
-$RAC2PRIVIP1 $RAC2HOSTNAME-priv1
+$RAC1PRIVIP1 ${RAC1HOSTNAME}-priv1.${DNSNAME} ${RAC1HOSTNAME}-priv1
+$RAC2PRIVIP1 ${RAC2HOSTNAME}-priv1.${DNSNAME} ${RAC2HOSTNAME}-priv1
 EOF
         fi
       else
@@ -1140,14 +1098,6 @@ $RAC2PUBLICIP $RAC2HOSTNAME
 $RAC1PRIVIP $RAC1HOSTNAME-priv
 $RAC2PRIVIP $RAC2HOSTNAME-priv
 
-EOF
-        ##add private1
-        if [ -n "${RAC1PRIVIP1}" ]; then
-          cat <<EOF >>/etc/hosts
-##Private IP 2
-$RAC1PRIVIP1 $RAC1HOSTNAME-priv1
-$RAC2PRIVIP1 $RAC2HOSTNAME-priv1
-
 ##Virtual IP
 $RAC1VIP $RAC1HOSTNAME-vip
 $RAC2VIP $RAC2HOSTNAME-vip
@@ -1155,17 +1105,6 @@ $RAC2VIP $RAC2HOSTNAME-vip
 ##Scan IP
 $RACSCANIP $RACSCANNAME
 EOF
-        else
-          cat <<EOF >>/etc/hosts
-
-##Virtual IP
-$RAC1VIP $RAC1HOSTNAME-vip
-$RAC2VIP $RAC2HOSTNAME-vip
-
-##Scan IP
-$RACSCANIP $RACSCANNAME
-EOF
-        fi
       fi
     else
       cat <<EOF >>/etc/hosts
@@ -1555,12 +1494,6 @@ $RAC2HOSTNAME
 $RAC1HOSTNAME-priv
 $RAC2HOSTNAME-priv
 EOF
-  if [ -n "${RAC1PRIVIP1}" ]; then
-    cat <<EOF >>"${SOFTWAREDIR}"/sshhostList.cfg
-$RAC1HOSTNAME-priv1
-$RAC2HOSTNAME-priv1
-EOF
-  fi
   rm -rf /root/.ssh
   rm -rf /home/oracle/.ssh
   rm -rf /home/grid/.ssh
@@ -1579,13 +1512,12 @@ EOF
 #Configure Udev+Multipath ASMDISK
 ####################################################################################
 UDEV_ASMDISK() {
-  if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
-    # Install multipath
-    yum install -y device-mapper*
-    mpathconf --enable --with_multipathd y
+  # Install multipath
+  yum install -y device-mapper*
+  mpathconf --enable --with_multipathd y
 
-    # Configure multipath
-    cat <<EOF >/etc/multipath.conf
+  # Configure multipath
+  cat <<EOF >/etc/multipath.conf
 defaults {
     user_friendly_names yes
 }
@@ -1596,8 +1528,6 @@ blacklist {
 
 multipaths {
 EOF
-  fi
-
   ocrdisk_sum=0
   for i in ${OCR_BASEDISK//,/ }; do
     ##judge whether disk is null,if disk is not null
@@ -1622,45 +1552,21 @@ EOF
         fi
       fi
     fi
-
-    ##Configure multipath.conf
-    if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
-      ## VirtualBox
-    if [ "${VirtualBox}" = "y" ] || [ "${VirtualBox}" = "Y" ]; then
-      num1=$((num1 + 1))
-      if [ "${OS_VERSION}" = "linux6" ]; then
-        cat <<EOF >>/etc/multipath.conf
-  multipath {
-  wwid "$(echo $(scsi_id -g -u "${i}") | sed 's/1ATA_//')"
-  alias ocr_${num1}
-  }
-EOF
-      elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-        cat <<EOF >>/etc/multipath.conf
-  multipath {
-  wwid "$(echo $(/usr/lib/udev/scsi_id -g -u "${i}") | sed 's/1ATA_//')"
-  alias ocr_${num1}
-  }
-EOF
-      fi
-    else
-      num1=$((num1 + 1))
-      if [ "${OS_VERSION}" = "linux6" ]; then
-        cat <<EOF >>/etc/multipath.conf
+    num1=$((num1 + 1))
+    if [ "${OS_VERSION}" = "linux6" ]; then
+      cat <<EOF >>/etc/multipath.conf
   multipath {
   wwid "$(scsi_id -g -u "${i}")"
   alias ocr_${num1}
   }
 EOF
-      elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-        cat <<EOF >>/etc/multipath.conf
+    elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
+      cat <<EOF >>/etc/multipath.conf
   multipath {
   wwid "$(/usr/lib/udev/scsi_id -g -u "${i}")"
   alias ocr_${num1}
   }
 EOF
-      fi
-    fi
     fi
   done
 
@@ -1695,105 +1601,64 @@ EOF
         fi
       fi
     fi
-    ##Configure multipath.conf
-    if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
-       ## VirtualBox
-    if [ "${VirtualBox}" = "y" ] || [ "${VirtualBox}" = "Y" ]; then
-      num2=$((num2 + 1))
-      if [ "${OS_VERSION}" = "linux6" ]; then
-        cat <<EOF >>/etc/multipath.conf
-  multipath {
-  wwid "$(echo $(scsi_id -g -u "${i}") | sed 's/1ATA_//')"
-  alias data_${num2}
-  }
-EOF
-      elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-        cat <<EOF >>/etc/multipath.conf
-  multipath {
-  wwid "$(echo $(/usr/lib/udev/scsi_id -g -u "${i}") | sed 's/1ATA_//')"
-  alias data_${num2}
-  }
-EOF
-      fi
-    else
-      num2=$((num2 + 1))
-      if [ "${OS_VERSION}" = "linux6" ]; then
-        cat <<EOF >>/etc/multipath.conf
+    num2=$((num2 + 1))
+    if [ "${OS_VERSION}" = "linux6" ]; then
+      cat <<EOF >>/etc/multipath.conf
   multipath {
   wwid "$(scsi_id -g -u "${i}")"
   alias data_${num2}
   }
 EOF
-      elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-        cat <<EOF >>/etc/multipath.conf
+    elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
+      cat <<EOF >>/etc/multipath.conf
   multipath {
   wwid "$(/usr/lib/udev/scsi_id -g -u "${i}")"
   alias data_${num2}
   }
 EOF
-      fi
-    fi
     fi
   done
 
-  ##Configure multipath.conf
-  if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
-    echo "}" >>/etc/multipath.conf
+  echo "}" >>/etc/multipath.conf
 
-    multipath -F
-    multipath -v2
-    multipath -r
-    multipath -F
-    multipath -v2
-  fi
+  multipath -F
+  multipath -v2
+  multipath -r
+  multipath -F
+  multipath -v2
 
   logwrite "multipath info:" "multipath -ll"
 
   ####################################################################################
   # Configure udev
   ####################################################################################
+  if [ -f /dev/mapper/udev_info ]; then
+    rm -rf /dev/mapper/udev_info
+  fi
+  cd /dev/mapper || return
+  for i in ocr_* data_*; do
+    printf "%s %s\n" "$i" "$(udevadm info --query=all --name=/dev/mapper/"$i" | grep -i dm_uuid)" >>udev_info
+  done
+  cd ~ || return
 
-  if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
-    if [ -f /dev/mapper/udev_info ]; then
-      rm -rf /dev/mapper/udev_info
-    fi
-    cd /dev/mapper || return
-    for i in ocr_* data_*; do
-      printf "%s %s\n" "$i" "$(udevadm info --query=all --name=/dev/mapper/"$i" | grep -i dm_uuid)" >>udev_info
-    done
-    cd ~ || return
+  if [ -f /etc/udev/rules.d/99-oracle-asmdevices.rules ]; then
+    rm -rf /etc/udev/rules.d/99-oracle-asmdevices.rules
+  fi
+  while read -r line; do
+    dm_uuid=$(echo "$line" | awk -F'=' '{print $2}')
+    disk_name=$(echo "$line" | awk '{print $1}')
+    echo "KERNEL==\"dm-*\",ENV{DM_UUID}==\"${dm_uuid}\",SYMLINK+=\"asm_${disk_name}\",OWNER=\"grid\",GROUP=\"asmadmin\",MODE=\"0660\"" >>/etc/udev/rules.d/99-oracle-asmdevices.rules
+  done </dev/mapper/udev_info
 
-    ##remove  /etc/udev/rules.d/99-oracle-asmdevices.rules
-    if [ ! -f /etc/udev/rules.d/99-oracle-asmdevices.rules ]; then
-      rm -rf /etc/udev/rules.d/99-oracle-asmdevices.rules
-    fi
-
-    while read -r line; do
-      dm_uuid=$(echo "$line" | awk -F'=' '{print $2}')
-      disk_name=$(echo "$line" | awk '{print $1}')
-      echo "KERNEL==\"dm-*\",ENV{DM_UUID}==\"${dm_uuid}\",SYMLINK+=\"asm_${disk_name}\",OWNER=\"grid\",GROUP=\"asmadmin\",MODE=\"0660\"" >>/etc/udev/rules.d/99-oracle-asmdevices.rules
-    done </dev/mapper/udev_info
-
-    if [ "${OS_VERSION}" = "linux6" ]; then
-      start_udev
-    elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-      udevadm control --reload-rules
-      udevadm trigger --type=devices
-    fi
-
-    ##Judge UDEV whether load,if not , wait for
-    while true; do
-      sleep 5
-      if [ "$(find /dev -mindepth 1 -name 'asm*' | wc -l)" -gt 0 ]; then
-        echo
-        echo
-        c1 "Successfully load udev." blue
-        break
-      fi
-    done
+  if [ "${OS_VERSION}" = "linux6" ]; then
+    start_udev
+  elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
+    udevadm control --reload-rules
+    udevadm trigger --type=devices
   fi
 
-  ##Configure ASMDISK for grip.rsp
+  sleep 2
+
   if [ -f "${SOFTWAREDIR}"/ocr_temp ]; then
     rm -rf "${SOFTWAREDIR}"/ocr_temp
   fi
@@ -1877,7 +1742,6 @@ EOF
 
     [ -f /etc/ntp.conf ] && mv /etc/ntp.conf /etc/ntp.conf.orig
   elif [ "${OS_VERSION}" = "linux7" ] || [ "${OS_VERSION}" = "linux8" ]; then
-    yum install -y chrony
     timedatectl set-timezone Asia/Shanghai
     if [ "$(systemctl status chronyd | grep -c running)" -gt 0 ]; then
       systemctl stop chronyd.service
@@ -2203,7 +2067,11 @@ EOF
   # Edit bash_profile
   ####################################################################################
   ##ROOT:
-  root_profile=/root/.bash_profile
+  if [ "$OS_VER_PRI" -eq 6 ]; then
+    root_profile=/root/.profile
+  elif [ "$OS_VER_PRI" -eq 7 ] || [ "$OS_VER_PRI" -eq 8 ]; then
+    root_profile=/root/.bash_profile
+  fi
   if [ "$(grep -E -c "#OracleBegin" ${root_profile})" -eq 0 ]; then
     cat <<EOF >>${root_profile}
 ################OracleBegin#########################
@@ -2268,11 +2136,8 @@ EOF
 EOF
     fi
   else
-    cp /home/oracle/.bash_profile /home/oracle/.bash_profile_bak
-    chown -R oracle:oinstall /home/oracle/.bash_profile_bak
     ##if oraclesid oraclehome oraclebase is not the same of bash_profile , will update
     oracleSid=$(grep "ORACLE_SID=" /home/oracle/.bash_profile | awk '{print $2}')
-    oracleSid=${oracleSid#*=}
     oracleHostname=$(grep "ORACLE_HOSTNAME=" /home/oracle/.bash_profile | awk '{print $2}')
     oracleHostname=${oracleHostname#*=}
     oracleBase=$(grep "ORACLE_BASE=" /home/oracle/.bash_profile | awk '{print $2}')
@@ -2368,7 +2233,7 @@ UnzipGridSoft() {
       rm -rf "${SOFTWAREDIR}"/grid
     fi
     if unzip -o "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_3of7.zip -d "${SOFTWAREDIR}"; then
-      ##rm -rf "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_3of7.zip
+      rm -rf "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_3of7.zip
       chown -R grid:oinstall "${SOFTWAREDIR}"/grid
     else
       c1 "Make sure the grid installation package is in the ${SOFTWAREDIR} directory:" red
@@ -2384,7 +2249,7 @@ UnzipGridSoft() {
       fi
     fi
     if unzip -o "${SOFTWAREDIR}"/LINUX.X64_122010_grid_home.zip -d "${ENV_GRID_HOME}"; then
-      ##rm -rf "${SOFTWAREDIR}"/LINUX.X64_122010_grid_home.zip
+      rm -rf "${SOFTWAREDIR}"/LINUX.X64_122010_grid_home.zip
       chown -R grid:oinstall "${ENV_GRID_HOME}"
     else
       c1 "Make sure the grid installation package is in the ${SOFTWAREDIR} directory:" red
@@ -2400,7 +2265,7 @@ UnzipGridSoft() {
       fi
     fi
     if unzip -o "${SOFTWAREDIR}"/LINUX.X64_180000_grid_home.zip -d "${ENV_GRID_HOME}"; then
-      ##rm -rf "${SOFTWAREDIR}"/LINUX.X64_180000_grid_home.zip
+      rm -rf "${SOFTWAREDIR}"/LINUX.X64_180000_grid_home.zip
       chown -R grid:oinstall "${ENV_GRID_HOME}"
     else
       c1 "Make sure the grid installation package is in the ${SOFTWAREDIR} directory:" red
@@ -2416,7 +2281,7 @@ UnzipGridSoft() {
       fi
     fi
     if unzip -o "${SOFTWAREDIR}"/LINUX.X64_193000_grid_home.zip -d "${ENV_GRID_HOME}"; then
-      ##rm -rf "${SOFTWAREDIR}"/LINUX.X64_193000_grid_home.zip
+      rm -rf "${SOFTWAREDIR}"/LINUX.X64_193000_grid_home.zip
       chown -R grid:oinstall "${ENV_GRID_HOME}"
     else
       c1 "Make sure the grid installation package is in the ${SOFTWAREDIR} directory:" red
@@ -3238,7 +3103,6 @@ EOF
       c1 "p18370031_112040_Linux-x86-64.zip" blue
       exit 92
     else
-      ##rm -rf "${SOFTWAREDIR}"/p18370031_112040_Linux-x86-64.zip
       su - grid -c "${ENV_GRID_HOME}/OPatch/opatch napply -oh ${ENV_GRID_HOME} -local ${SOFTWAREDIR}/18370031 -silent"
       ##RAC scp  to  node 2
       if [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; then
@@ -3246,7 +3110,6 @@ EOF
         ssh "$RAC2HOSTNAME" chown -R grid:oinstall "${SOFTWAREDIR}"/18370031
         su - grid -c "ssh ${RAC2HOSTNAME} ${ENV_GRID_HOME}/OPatch/opatch napply -oh ${ENV_GRID_HOME} -local ${SOFTWAREDIR}/18370031 -silent"
       fi
-      rm -rf "${SOFTWAREDIR}"/18370031
     fi
   fi
 
@@ -3417,7 +3280,7 @@ UnzipDBSoft() {
       rm -rf "${SOFTWAREDIR}"/database
     fi
     if unzip -o "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_1of7.zip -d "${SOFTWAREDIR}"; then
-      ##rm -rf "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_1of7.zip
+      rm -rf "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_1of7.zip
       chown -R oracle:oinstall "${SOFTWAREDIR}"/database
     else
       c1 "Make sure the database installation package is in the ${SOFTWAREDIR} directory:" red
@@ -3426,7 +3289,7 @@ UnzipDBSoft() {
     fi
 
     if unzip -o "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_2of7.zip -d "${SOFTWAREDIR}"; then
-      ##rm -rf "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_2of7.zip
+      rm -rf "${SOFTWAREDIR}"/p13390677_112040_Linux-x86-64_2of7.zip
       chown -R oracle:oinstall "${SOFTWAREDIR}"/database
     else
       c1 "Make sure the database installation package is in the ${SOFTWAREDIR} directory:" red
@@ -3439,7 +3302,7 @@ UnzipDBSoft() {
       rm -rf "${SOFTWAREDIR}"/database
     fi
     if unzip -o "${SOFTWAREDIR}"/LINUX.X64_122010_db_home.zip -d "${SOFTWAREDIR}"; then
-      ##rm -rf "${SOFTWAREDIR}"/LINUX.X64_122010_db_home.zip
+      rm -rf "${SOFTWAREDIR}"/LINUX.X64_122010_db_home.zip
       chown -R oracle:oinstall "${SOFTWAREDIR}"/database
     else
       c1 "Make sure the database installation package is in the ${SOFTWAREDIR} directory:" red
@@ -3452,7 +3315,7 @@ UnzipDBSoft() {
       rm -rf "${ENV_ORACLE_HOME}"
     fi
     if unzip -o "${SOFTWAREDIR}"/LINUX.X64_180000_db_home.zip -d "${ENV_ORACLE_HOME}"; then
-      ## rm -rf "${SOFTWAREDIR}"/LINUX.X64_180000_db_home.zip
+      rm -rf "${SOFTWAREDIR}"/LINUX.X64_180000_db_home.zip
       chown -R oracle:oinstall "${ENV_ORACLE_HOME}"
     else
       c1 "Make sure the database installation package is in the ${SOFTWAREDIR} directory:" red
@@ -3465,7 +3328,7 @@ UnzipDBSoft() {
       rm -rf "${ENV_ORACLE_HOME}"
     fi
     if unzip -o "${SOFTWAREDIR}"/LINUX.X64_193000_db_home.zip -d "${ENV_ORACLE_HOME}"; then
-      ##rm -rf "${SOFTWAREDIR}"/LINUX.X64_193000_db_home.zip
+      rm -rf "${SOFTWAREDIR}"/LINUX.X64_193000_db_home.zip
       chown -R oracle:oinstall "${ENV_ORACLE_HOME}"
     else
       c1 "Make sure the database installation package is in the ${SOFTWAREDIR} directory:" red
@@ -3490,8 +3353,7 @@ InstallDBsoftware() {
     ## 18C
     if [ "${DB_VERSION}" = "18.0.0.0" ]; then
       if su - oracle -c "unzip -o ${SOFTWAREDIR}/p6880880_180000_Linux-x86-64.zip -d ${ENV_ORACLE_HOME}"; then
-        ##rm -rf "${SOFTWAREDIR}"/p6880880_180000_Linux-x86-64.zip
-        echo "unzip p6880880 successful"
+        rm -rf "${SOFTWAREDIR}"/p6880880_180000_Linux-x86-64.zip
       else
         c1 "Make sure the Patch 6880880 is in the ${SOFTWAREDIR} directory:" red
         c1 "p6880880_180000_Linux-x86-64.zip" blue
@@ -3500,8 +3362,7 @@ InstallDBsoftware() {
     ## 19C
     elif [ "${DB_VERSION}" = "19.3.0.0" ]; then
       if su - oracle -c "unzip -o ${SOFTWAREDIR}/p6880880_190000_Linux-x86-64.zip -d ${ENV_ORACLE_HOME}"; then
-        ##rm -rf "${SOFTWAREDIR}"/p6880880_190000_Linux-x86-64.zip
-        echo "unzip p6880880 successful"
+        rm -rf "${SOFTWAREDIR}"/p6880880_190000_Linux-x86-64.zip
       else
         c1 "Make sure the Patch 6880880 is in the ${SOFTWAREDIR} directory:" red
         c1 "p6880880_190000_Linux-x86-64.zip" blue
@@ -3741,8 +3602,7 @@ EOF
     ## 11G
     if [ "${DB_VERSION}" = "11.2.0.4" ]; then
       if su - oracle -c "unzip -o ${SOFTWAREDIR}/p6880880_112000_Linux-x86-64.zip -d ${ENV_ORACLE_HOME}"; then
-        ##rm -rf "${SOFTWAREDIR}"/p6880880_112000_Linux-x86-64.zip
-        echo "unzip p6880880 successful"
+        rm -rf "${SOFTWAREDIR}"/p6880880_112000_Linux-x86-64.zip
       else
         c1 "Make sure the Patch 6880880 is in the ${SOFTWAREDIR} directory:" red
         c1 "p6880880_112000_Linux-x86-64.zip" blue
@@ -3751,8 +3611,7 @@ EOF
       ## 12C
     elif [ "${DB_VERSION}" = "12.2.0.1" ]; then
       if su - oracle -c "unzip -o ${SOFTWAREDIR}/p6880880_122010_Linux-x86-64.zip -d ${ENV_ORACLE_HOME}"; then
-        ##rm -rf "${SOFTWAREDIR}"/p6880880_122010_Linux-x86-64.zip
-        echo "unzip p6880880 successful"
+        rm -rf "${SOFTWAREDIR}"/p6880880_122010_Linux-x86-64.zip
       else
         c1 "Make sure the Patch 6880880 is in the ${SOFTWAREDIR} directory:" red
         c1 "p6880880_122010_Linux-x86-64.zip" blue
@@ -3830,7 +3689,7 @@ EOF
       cd ~ || return
       rm -rf "/${SOFTWAREDIR:?}/""${OPATCH}"
       if [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; then
-        ssh "$RAC2HOSTNAME" rm -rf "/${SOFTWAREDIR:?}/""${OPATCH}"
+        ssh "$RAC2HOSTNAME" "/${SOFTWAREDIR:?}/""${OPATCH}"
       fi
     fi
   fi
@@ -3885,18 +3744,18 @@ EOF
 createDB() {
   if [ "${DB_VERSION}" = "11.2.0.4" ]; then
     if [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; then
-      if ! su - oracle -c "dbca -silent -createDatabase -templateName General_Purpose.dbc -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -asmsnmpPassword oracle -datafileDestination ${ASMDATANAME} -redoLogFileSize 120 -recoveryAreaDestination ${ASMDATANAME} -storageType ASM  -sampleSchema true -responseFile NO_VALUE -characterSet ${CHARACTERSET} -nationalCharacterSet ${NCHARACTERSET} -continueOnNonFatalErrors false -disableSecurityConfiguration ALL -diskGroupName ${ASMDATANAME} -emConfiguration NONE -listeners LISTENER -automaticMemoryManagement false -totalMemory ${totalMemory} -nodeinfo ${RAC1HOSTNAME},${RAC2HOSTNAME} -databaseType OLTP"; then
+      if ! su - oracle -c "dbca -silent -createDatabase -templateName General_Purpose.dbc -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -asmsnmpPassword oracle -datafileDestination ${ASMDATANAME} -redoLogFileSize 120 -recoveryAreaDestination ${ASMDATANAME} -storageType ASM  -sampleSchema true -responseFile NO_VALUE -characterSet ${CHARACTERSET} -nationalCharacterSet AL16UTF16 -continueOnNonFatalErrors false -disableSecurityConfiguration ALL -diskGroupName ${ASMDATANAME} -emConfiguration NONE -listeners LISTENER -automaticMemoryManagement false -totalMemory ${totalMemory} -nodeinfo ${RAC1HOSTNAME},${RAC2HOSTNAME} -databaseType OLTP"; then
         c1 "Sorry, Database Create Failed." red
         exit 99
       fi
     elif [ "${OracleInstallMode}" = "restart" ] || [ "${OracleInstallMode}" = "RESTART" ]; then
-      if ! su - oracle -c "dbca -silent -createDatabase -templateName General_Purpose.dbc -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -asmsnmpPassword oracle -datafileDestination ${ASMDATANAME} -redoLogFileSize 120 -recoveryAreaDestination ${ASMDATANAME} -storageType ASM  -sampleSchema true -responseFile NO_VALUE -characterSet ${CHARACTERSET} -nationalCharacterSet ${NCHARACTERSET} -continueOnNonFatalErrors false -disableSecurityConfiguration ALL -diskGroupName ${ASMDATANAME} -emConfiguration NONE -listeners LISTENER -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP"; then
+      if ! su - oracle -c "dbca -silent -createDatabase -templateName General_Purpose.dbc -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -asmsnmpPassword oracle -datafileDestination ${ASMDATANAME} -redoLogFileSize 120 -recoveryAreaDestination ${ASMDATANAME} -storageType ASM  -sampleSchema true -responseFile NO_VALUE -characterSet ${CHARACTERSET} -nationalCharacterSet AL16UTF16 -continueOnNonFatalErrors false -disableSecurityConfiguration ALL -diskGroupName ${ASMDATANAME} -emConfiguration NONE -listeners LISTENER -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP"; then
         c1 "Sorry, Database Create Failed." red
         exit 99
       fi
     else
       su - oracle -c "lsnrctl start"
-      if ! su - oracle -c "dbca -silent -createDatabase -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbname ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType FS -datafileDestination ${ORADATADIR} -sampleSchema true -characterSet ${CHARACTERSET} -nationalCharacterSet ${NCHARACTERSET} -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP"; then
+      if ! su - oracle -c "dbca -silent -createDatabase -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbname ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType FS -datafileDestination ${ORADATADIR} -sampleSchema true -characterSet ${CHARACTERSET} -nationalCharacterSet AL16UTF16 -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP"; then
         c1 "Sorry, Database Create Failed." red
         exit 99
       fi
@@ -3908,7 +3767,7 @@ createDB() {
   elif [ "${DB_VERSION}" = "12.2.0.1" ] || [ "${DB_VERSION}" = "18.0.0.0" ] || [[ "${DB_VERSION}" == "19.3.0.0" ]]; then
     if [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; then
       ASMDATANAME="+${ASMDATANAME}"
-      if ! su - oracle -c "dbca -silent -createDatabase -ignorePrereqFailure -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType ASM -enableArchive true -archiveLogDest ${ASMDATANAME} -databaseConfigType RAC -sampleSchema true -characterset ${CHARACTERSET} -nationalCharacterSet ${NCHARACTERSET} -datafileDestination ${ASMDATANAME} -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -nodeinfo ${RAC1HOSTNAME},${RAC2HOSTNAME} -databaseType OLTP -createAsContainerDatabase ${ISCDB}"; then
+      if ! su - oracle -c "dbca -silent -createDatabase -ignorePrereqFailure -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType ASM -enableArchive true -archiveLogDest ${ASMDATANAME} -databaseConfigType RAC -sampleSchema true -characterset ${CHARACTERSET} -nationalCharacterSet AL16UTF16 -datafileDestination ${ASMDATANAME} -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -nodeinfo ${RAC1HOSTNAME},${RAC2HOSTNAME} -databaseType OLTP -createAsContainerDatabase ${ISCDB}"; then
         c1 "Sorry, Database Create Failed." red
         exit 99
       fi
@@ -3924,13 +3783,13 @@ createDB() {
         # usermod -a -G racdba grid
         # su - oracle -c "relink all"
       fi
-      if ! su - oracle -c "dbca -silent -createDatabase -ignorePrereqFailure -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType ASM -enableArchive true -archiveLogDest ${ASMDATANAME} -databaseConfigType SINGLE -sampleSchema true -characterset ${CHARACTERSET} -nationalCharacterSet ${NCHARACTERSET} -datafileDestination ${ASMDATANAME} -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP -createAsContainerDatabase ${ISCDB}"; then
+      if ! su - oracle -c "dbca -silent -createDatabase -ignorePrereqFailure -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType ASM -enableArchive true -archiveLogDest ${ASMDATANAME} -databaseConfigType SINGLE -sampleSchema true -characterset ${CHARACTERSET} -nationalCharacterSet AL16UTF16 -datafileDestination ${ASMDATANAME} -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP -createAsContainerDatabase ${ISCDB}"; then
         c1 "Sorry, Database Create Failed." red
         exit 99
       fi
     else
       su - oracle -c "lsnrctl start"
-      if ! su - oracle -c "dbca -silent -createDatabase -ignorePrereqFailure -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType FS  -databaseConfigType SINGLE -datafileDestination ${ORADATADIR} -enableArchive true -archiveLogDest ${ARCHIVEDIR} -sampleSchema true -characterset ${CHARACTERSET} -nationalCharacterSet ${NCHARACTERSET} -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP -createAsContainerDatabase ${ISCDB}"; then
+      if ! su - oracle -c "dbca -silent -createDatabase -ignorePrereqFailure -templateName General_Purpose.dbc -responseFile NO_VALUE -gdbName ${ORACLE_SID} -sid ${ORACLE_SID} -sysPassword oracle -systemPassword oracle -redoLogFileSize 120 -storageType FS  -databaseConfigType SINGLE -datafileDestination ${ORADATADIR} -enableArchive true -archiveLogDest ${ARCHIVEDIR} -sampleSchema true -characterset ${CHARACTERSET} -nationalCharacterSet AL16UTF16 -emConfiguration NONE -automaticMemoryManagement false -totalMemory ${totalMemory} -databaseType OLTP -createAsContainerDatabase ${ISCDB}"; then
         c1 "Sorry, Database Create Failed." red
         exit 99
       fi
@@ -3977,7 +3836,7 @@ EOF
   ####################################################################################
   # Create PDB and Set pdb autostart with cdb
   ####################################################################################
-  if [ "${ISCDB}" = "TRUE" ] && [ -n "${PDBNAME}" ]; then
+  if [ "${ISCDB}" = "TRUE" ]; then
     if [ ! -f /home/oracle/pdbs_save_state.sql ]; then
       cat <<EOF >>/home/oracle/pdbs_save_state.sql
 --create pluggable database
@@ -4166,7 +4025,7 @@ EOF
   ####################################################################################
   # Configure PASSWORD_LIFE_TIME UNLIMITED
   ####################################################################################
-  if [ "${ISCDB}" = "TRUE" ] && [ -n "${PDBNAME}" ]; then
+  if [ "${ISCDB}" = "TRUE" ]; then
     cat <<EOF >/home/oracle/password_unlimt.sql
 ALTER PROFILE DEFAULT LIMIT PASSWORD_LIFE_TIME UNLIMITED;
 ALTER SYSTEM SET AUDIT_TRAIL=NONE SCOPE=SPFILE;
@@ -4239,84 +4098,6 @@ EOF
       scp "${ENV_ORACLE_HOME}"/network/admin/sqlnet.ora "${RAC2HOSTNAME}":"${ENV_ORACLE_HOME}"/network/admin/
     fi
   fi
-  ####################################################################################
-  # Configure glogin.sql
-  ####################################################################################
-  if [ "$(grep -E -c "OracleBegin" "${ENV_ORACLE_HOME}"/sqlplus/admin/glogin.sql)" -eq 0 ]; then
-    [ ! -f "${ENV_ORACLE_HOME}"/sqlplus/admin/glogin.sql."${DAYTIME}" ] && cp "${ENV_ORACLE_HOME}"/sqlplus/admin/glogin.sql "${ENV_ORACLE_HOME}"/sqlplus/admin/glogin.sql."${DAYTIME}"
-    cat <<EOF >"${ENV_ORACLE_HOME}"/sqlplus/admin/glogin.sql
---OracleBegin
-define _editor=vi
-set serveroutput on size 1000000
-set long 200
-set timing on
-set linesize 500
-set pagesize 9999
-set trimspool on
-col Name format a80
-set termout off
-col global_name new_value gname
-define gname=idle
-select lower(user) || '@' || substr( global_name, 1, decode( dot, 0,length(global_name), dot-1) ) global_name from (select global_name, instr(global_name,'.') dot from global_name );
-set sqlprompt '&gname _DATE> '
-ALTER SESSION SET nls_date_format = 'HH24:MI:SS';
-set termout on
-
-col TABLESPACE_NAME for a20
-select tbs_used_info.tablespace_name,
-       tbs_used_info.alloc_mb,
-       tbs_used_info.used_mb,
-       tbs_used_info.max_mb,
-       tbs_used_info.free_of_max_mb,
-       tbs_used_info.used_of_max || '%' used_of_max_pct
-  from (select a.tablespace_name,
-               round(a.bytes_alloc / 1024 / 1024) alloc_mb,
-               round((a.bytes_alloc - nvl(b.bytes_free,
-                                          0)) / 1024 / 1024) used_mb,
-               round((a.bytes_alloc - nvl(b.bytes_free,
-                                          0)) * 100 / a.maxbytes) used_of_max,
-               round((a.maxbytes - a.bytes_alloc + nvl(b.bytes_free,
-                                                       0)) / 1048576) free_of_max_mb,
-               round(a.maxbytes / 1048576) max_mb
-          from (select f.tablespace_name,
-                       sum(f.bytes) bytes_alloc,
-                       sum(decode(f.autoextensible,
-                                  'YES',
-                                  f.maxbytes,
-                                  'NO',
-                                  f.bytes)) maxbytes
-                  from dba_data_files f
-                 group by tablespace_name) a,
-               (select f.tablespace_name,
-                       sum(f.bytes) bytes_free
-                  from dba_free_space f
-                 group by tablespace_name) b
-         where a.tablespace_name = b.tablespace_name(+)) tbs_used_info
- order by tbs_used_info.used_of_max desc;
-
-col status for a10
-col input_type for a20
-col INPUT_BYTES_DISPLAY for a10
-col OUTPUT_BYTES_DISPLAY for a10
-col TIME_TAKEN_DISPLAY for a10
-
-select input_type,
-       status,
-       to_char(start_time,
-               'yyyy-mm-dd hh24:mi:ss'),
-       to_char(end_time,
-               'yyyy-mm-dd hh24:mi:ss'),
-       input_bytes_display,
-       output_bytes_display,
-       time_taken_display,
-       COMPRESSION_RATIO
-  from v\$rman_backup_job_details
- where start_time > date '2021-07-01'
- order by 3 desc;
- --OracleEnd
-EOF
-  fi
-
   if [ "$(find "/home/oracle" -maxdepth 1 -name '*.sql' | wc -l)" -gt 0 ]; then
     cd ~ || return
     rm -rf /home/oracle/*.sql
@@ -4338,9 +4119,7 @@ if [ "${OracleInstallMode}" = "single" ] || [ "${OracleInstallMode}" = "SINGLE" 
   #DisableNetworkManager
   InstallRlwrap
   EditParaFiles
-  if [ "${ONLYCREATEDB}" = 'N' ]; then
-    UnzipDBSoft
-  fi
+  UnzipDBSoft
   ##If ONLY INSTALL ORACLE SOFTWARE
   if [ "${ONLYCONFIGOS}" = 'N' ]; then
     if [ "${ONLYINSTALLORACLE}" = 'Y' ]; then
@@ -4368,7 +4147,11 @@ elif [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; t
   SetHosts
   TimeDepSet
   CreateUsersAndDirs
-  UDEV_ASMDISK
+  if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
+    if [ ! -f /etc/udev/rules.d/99-oracle-asmdevices.rules ]; then
+      UDEV_ASMDISK
+    fi
+  fi
   if [ "${DNSSERVER}" = "y" ] || [ "${DNSSERVER}" = "Y" ]; then
     DNSServerConf
   fi
@@ -4392,10 +4175,8 @@ elif [ "${OracleInstallMode}" = "rac" ] || [ "${OracleInstallMode}" = "RAC" ]; t
   InstallRlwrap
   EditParaFiles
   if [ "$nodeNum" -eq 1 ]; then
-    if [ "${ONLYCREATEDB}" = 'N' ]; then
-      UnzipGridSoft
-      UnzipDBSoft
-    fi
+    UnzipGridSoft
+    UnzipDBSoft
   fi
   ##Just nodenum 1 to excute
   if [ "$nodeNum" -eq 1 ]; then
@@ -4435,7 +4216,11 @@ elif [ "${OracleInstallMode}" = "restart" ] || [ "${OracleInstallMode}" = "RESTA
   SetHostName
   SetHosts
   CreateUsersAndDirs
-  UDEV_ASMDISK
+  if [ "${UDEV}" = "Y" ] || [ "${UDEV}" = "y" ]; then
+    if [ ! -f /etc/udev/rules.d/99-oracle-asmdevices.rules ]; then
+      UDEV_ASMDISK
+    fi
+  fi
   TimeDepSet
   Disableavahi
   DisableFirewall
@@ -4444,10 +4229,8 @@ elif [ "${OracleInstallMode}" = "restart" ] || [ "${OracleInstallMode}" = "RESTA
   #DisableNetworkManager
   InstallRlwrap
   EditParaFiles
-  if [ "${ONLYCREATEDB}" = 'N' ]; then
-    UnzipGridSoft
-    UnzipDBSoft
-  fi
+  UnzipGridSoft
+  UnzipDBSoft
   ##If ONLY INSTALL GRID SOFTWARE
   if [ "${ONLYCONFIGOS}" = 'N' ]; then
     if [ "${ONLYINSTALLGRID}" = "Y" ]; then
